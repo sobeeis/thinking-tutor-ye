@@ -321,7 +321,7 @@ def generate_transfer_comment(
 # 대화 기록 저장소 만들기
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
+# 단계 지정하기
 if "stage" not in st.session_state:
     st.session_state.stage = "question"
 
@@ -352,6 +352,11 @@ if "reference_answer" not in st.session_state:
 if "transfer_question" not in st.session_state:
     st.session_state.transfer_question = ""
 
+#재시도 카운터 초기화
+if "retry_count" not in st.session_state:
+    st.session_state.retry_count = 0
+
+#프롬프트 출력 파트
 if prompt:
 
     st.session_state.messages.append(
@@ -362,6 +367,7 @@ if prompt:
     )
 
     if st.session_state.stage == "question":
+        st.session_state.retry_count = 0
 
         st.session_state.original_question = prompt
 
@@ -403,7 +409,7 @@ if prompt:
                 evaluation,
                 level
             )
-
+            st.session_state.transfer_question = next_question
             answer = f"""
         ### 이해 수준
         Level 5
@@ -442,41 +448,106 @@ if prompt:
 
     elif st.session_state.stage == "retry":
 
-        # 1. 수정 답변 다시 평가
-        retry_evaluation = evaluate_answer(
-            st.session_state.original_question,
-            st.session_state.reference_answer,
-            prompt
-        )
+        # 0. 3회 이상 시도했고 사용자가 답을 요청한 경우
+        if (
+            st.session_state.retry_count >= 3
+            and prompt.strip() == "답을 알려줘"
+        ):
 
-        # 2. 수정 답변 점수 계산
-        retry_score = calculate_score(
-            retry_evaluation
-        )
+            next_question = generate_next_question(
+                st.session_state.original_question,
+                st.session_state.first_answer,
+                {"feedback": "학생이 여러 번 시도한 뒤 기준답안을 확인함"},
+                3
+            )
 
-        # 3. 수정 답변 레벨 계산
-        retry_level = get_level(
-            retry_score
-        )
+            st.session_state.transfer_question = next_question
 
-        # 4. 처음 점수와 비교
-        score_change = (
-            retry_score
-            - st.session_state.first_score
-        )
+            answer = f"""
+    ### 📘 기준답안
 
-        # 5. 다음 생각 질문 생성
-        next_question = generate_next_question(
-            st.session_state.original_question,
-            prompt,
-            retry_evaluation,
-            retry_level
-        )
+    {st.session_state.reference_answer}
 
-        st.session_state.transfer_question = next_question
+    ---
 
-        # 6. 화면에 보여줄 답변
-        answer = f"""
+    ### 💭 다음 생각
+
+    {next_question}
+    """
+
+            st.session_state.stage = "transfer"
+
+        else:
+
+            # 1. 수정 답변 평가
+            retry_evaluation = evaluate_answer(
+                st.session_state.original_question,
+                st.session_state.reference_answer,
+                prompt
+            )
+
+            retry_score = calculate_score(retry_evaluation)
+            retry_level = get_level(retry_score)
+
+            score_change = (
+                retry_score
+                - st.session_state.first_score
+            )
+
+            st.session_state.retry_count += 1
+
+            # 2. Level 4~5 → 전이
+            if retry_level >= 4:
+
+                next_question = generate_next_question(
+                    st.session_state.original_question,
+                    prompt,
+                    retry_evaluation,
+                    retry_level
+                )
+
+                st.session_state.transfer_question = next_question
+
+                answer = f"""
+    ### 재평가 결과
+
+    처음 점수: **{st.session_state.first_score}점**
+
+    수정 후 점수: **{retry_score}점**
+
+    변화: **{score_change:+.1f}점**
+
+    현재 Level: **{retry_level}**
+
+    충분한 이해 수준에 도달했습니다.
+
+    ### 💭 다음 생각
+
+    {next_question}
+    """
+
+                st.session_state.stage = "transfer"
+
+            # 3. Level 1~3 → 다시 피드백
+            else:
+
+                feedback = generate_feedback(
+                    st.session_state.original_question,
+                    prompt,
+                    retry_evaluation,
+                    retry_level
+                )
+
+                help_message = ""
+
+                if st.session_state.retry_count >= 3:
+                    help_message = """
+    ---
+    💡 여러 번 고민했는데도 어렵다면  
+    **`답을 알려줘`** 라고 입력해도 괜찮아요.
+    """
+
+                answer = f"""
     ### 재평가 결과
 
     처음 점수: **{st.session_state.first_score}점**
@@ -488,18 +559,14 @@ if prompt:
     현재 Level: **{retry_level}**
 
     ### 피드백
-    {retry_evaluation["feedback"]}
+    {feedback}
 
-    ---
+    ✏️ 피드백을 참고해서 다시 답변해보세요.
 
-    ### 💭 다음 생각
-
-    {next_question}
+    {help_message}
     """
 
-        # 7. 일단 다음 단계로 이동
-        st.session_state.stage = "transfer"
-
+                st.session_state.stage = "retry"
     elif st.session_state.stage == "transfer":
 
         transfer_comment = generate_transfer_comment(
