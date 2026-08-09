@@ -20,7 +20,11 @@ st.title("🧠 Thinking feedback Tutor")
 #설명
 st.caption(
     "답을 대신하는 AI가 아니라\n"
-    "학생의 능동적인 생각을 도와주는 해룡고등학교 특제 AI, made by 예찬"
+    "학생의 능동적인 생각을 도와주는 해룡고등학교 특제 AI, made by 예찬\n" 
+    "프로그램의 순서는 다음과 같다\n" 
+    "사용자의 질문 -> AI의 질문 -> 사용자의 답변 -> AI의 피드백 -> 사용자의 재답변 -> AI의 재 피드백 -> 전이학습(예시 적용 및 추가로 생각하여 볼 점)-> 평가\n"
+    "자신의 말로 개념을 표현해보며 개념을 자신의 것으로 만들 수 있게 도와준다.\n"
+    "오류나 개선사항은 swordmastersm1234@gmail.com으로!"
 )
 
 llm = ChatUpstage()
@@ -378,6 +382,7 @@ if prompt:
         )
         
         answer = (
+        "stage1\n"
         "좋아. 바로 설명하기 전에 네 생각을 먼저 말해봐.\n\n"
         f"**질문:** {prompt}\n\n"
         "정확하지 않아도 괜찮아."
@@ -413,6 +418,7 @@ if prompt:
             )
             st.session_state.transfer_question = next_question
             answer = f"""
+        stage2
         ### 이해 수준
         Level 5
 
@@ -434,6 +440,7 @@ if prompt:
             )
 
             answer = f"""
+        stage2 피드백
         ### 현재 이해 수준
         Level {level}
 
@@ -511,6 +518,7 @@ if prompt:
                 st.session_state.transfer_question = next_question
 
                 answer = f"""
+    stage3:재 피드백
     ### 재평가 결과
 
     처음 점수: **{st.session_state.first_score}점**
@@ -550,6 +558,7 @@ if prompt:
     """
 
                 answer = f"""
+    stage3:재 피드백
     ### 재평가 결과
 
     처음 점수: **{st.session_state.first_score}점**
@@ -578,6 +587,7 @@ if prompt:
         )
 
         answer = f"""
+    stage4:평가    
     ### 🧠 적용 결과
 
     {transfer_comment}
